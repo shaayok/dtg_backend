@@ -20,6 +20,10 @@ app = Flask(__name__)
 CORS(app)
 app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY', 'supersecretkey')
 
+@app.route('/', methods=['GET'])
+def welcome():
+    return jsonify({"message": "Welcome to DTG Backend", "status": "active"}), 200
+
 @app.route('/api', methods=['GET'])
 def healthcheck():
     page = request.args.get('page', 1)
