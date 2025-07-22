@@ -185,7 +185,7 @@ def quote():
         url = f"{instance_url}/services/data/v60.0/sobjects/gii__SalesQuote__c/"
         payload = {
             "gii__Account__c": account_id,
-            "Quote_Name__c": f"Test Quote on {datetime.strftime(datetime.now(),'%d %B %Y')}",
+            "Quote_Name__c": f"Test Quote on {datetime.strftime(datetime.now(),'%d %B %Y %H:%M')}",
             "gii__Status__c": "Open",
             "gii__SalesRepresentative__c": "0031I000009dExWQAU"
         }
@@ -442,14 +442,14 @@ def get_account_data():
         return "Unknown", "N/A", "N/A"
 
     def get_sales_orders(account_id, page=1):
-        offset = (page - 1) * 10
+        offset = (page - 1) * 5
         query = f"""
         SELECT Id, gii__CustomerPONumber__c, gii__Status__c, gii__OrderType__c, gii__OrderStatus__c, 
             gii__SalesQuote__c, gii__SalesQuote__r.Quote_Name__c, gii__OrderDate__c
         FROM gii__SalesOrder__c 
         WHERE gii__Account__c = '{account_id}'
         ORDER BY gii__OrderDate__c DESC
-        LIMIT 10 OFFSET {offset}
+        LIMIT 5 OFFSET {offset}
         """
         url = f"{instance_url}/services/data/v60.0/query?q={urllib.parse.quote(query)}"
         r = requests.get(url, headers=headers)
@@ -462,13 +462,13 @@ def get_account_data():
         return r.json().get("records", [])
 
     def get_sales_quotes(account_id, page=1):
-        offset = (page - 1) * 10
+        offset = (page - 1) * 5
         query = f"""
         SELECT Id, Quote_Name__c, gii__Status__c, gii__QuoteDate__c 
         FROM gii__SalesQuote__c 
         WHERE gii__Account__c = '{account_id}'
         ORDER BY gii__QuoteDate__c DESC
-        LIMIT 10 OFFSET {offset}
+        LIMIT 5 OFFSET {offset}
         """
         url = f"{instance_url}/services/data/v60.0/query?q={urllib.parse.quote(query)}"
         r = requests.get(url, headers=headers)
@@ -529,7 +529,7 @@ def get_account_data():
         "orders": [],
         "quotes": [],
         "page": page,
-        "page_size": 10
+        "page_size": 5
     }
     
     try:
