@@ -504,6 +504,38 @@ def get_account_data():
         r = requests.get(url, headers=headers)
         return r.json().get("records", [])
     
+    def get_order_stats(account_id):
+        """Returns total orders and open orders count for an account"""
+        # Total orders
+        total_query = f"SELECT COUNT() FROM gii__SalesOrder__c WHERE gii__Account__c = '{account_id}'"
+        total_url = f"{instance_url}/services/data/v60.0/query?q={urllib.parse.quote(total_query)}"
+        total_response = requests.get(total_url, headers=headers)
+        total_orders = total_response.json().get("totalSize", 0)
+        
+        # Open orders
+        open_query = f"SELECT COUNT() FROM gii__SalesOrder__c WHERE gii__Account__c = '{account_id}' AND gii__Status__c = 'Open'"
+        open_url = f"{instance_url}/services/data/v60.0/query?q={urllib.parse.quote(open_query)}"
+        open_response = requests.get(open_url, headers=headers)
+        open_orders = open_response.json().get("totalSize", 0)
+        
+        return total_orders, open_orders
+    
+    def get_quote_stats(account_id):
+        """Returns total quotes and open quotes count for an account"""
+        # Total quotes
+        total_query = f"SELECT COUNT() FROM gii__SalesQuote__c WHERE gii__Account__c = '{account_id}'"
+        total_url = f"{instance_url}/services/data/v60.0/query?q={urllib.parse.quote(total_query)}"
+        total_response = requests.get(total_url, headers=headers)
+        total_quotes = total_response.json().get("totalSize", 0)
+        
+        # Open quotes
+        open_query = f"SELECT COUNT() FROM gii__SalesQuote__c WHERE gii__Account__c = '{account_id}' AND gii__Status__c = 'Open'"
+        open_url = f"{instance_url}/services/data/v60.0/query?q={urllib.parse.quote(open_query)}"
+        open_response = requests.get(open_url, headers=headers)
+        open_quotes = open_response.json().get("totalSize", 0)
+        
+        return total_quotes, open_quotes
+    
     # Get account name from query parameter
     account_name = request.args.get('account_name')
     tab = request.args.get('type', 'orders')
@@ -529,13 +561,18 @@ def get_account_data():
         "orders": [],
         "quotes": [],
         "page": page,
-        "page_size": 5
+        "page_size": 5,
+        "total_orders": 0,
+        "total_quotes": 0,
+        "open_orders": 0,
+        "open_quotes": 0
     }
     
     try:
         if tab == 'orders':
             # --- SALES ORDERS ---
             orders = get_sales_orders(account_id, page)
+            total_orders, open_orders = get_order_stats(account_id)
             for order in orders:
                 # Get related quote information if exists
                 quote_id = order.get('gii__SalesQuote__c')
@@ -571,9 +608,12 @@ def get_account_data():
                     order_data["lines"].append(line_data)
                 
                 result["orders"].append(order_data)
+            result["total_orders"] = total_orders
+            result["open_orders"] = open_orders
         else:    
             # --- SALES QUOTES ---
             quotes = get_sales_quotes(account_id, page)
+            total_quotes, open_quotes = get_quote_stats(account_id)
             for quote in quotes:
                 quote_data = {
                     "name": quote['Quote_Name__c'],
@@ -599,7 +639,8 @@ def get_account_data():
                     quote_data["lines"].append(line_data)
                 
                 result["quotes"].append(quote_data)
-            
+            result["total_quotes"] = total_quotes
+            result["open_quotes"] = open_quotes
         return jsonify(result)
         
     except Exception as e:
