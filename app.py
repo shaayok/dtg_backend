@@ -355,7 +355,14 @@ def send_quote_email():
     # Email config
     gmail_user = os.getenv('GMAIL_USER')
     gmail_app_password = os.getenv('GMAIL_APP_PASSWORD')
-    to_email = os.getenv('EMAIL_TO', 'sayaksamaddar@virtualemployee.com')  # or data['created_by_email'] for self-copy
+    
+    # Get both email recipients
+    email_to_1 = os.getenv('EMAIL_TO')
+    email_to_2 = 'sayaksamaddar@virtualemployee.com'  # Second email recipient
+    
+    # Create list of recipients (filter out empty emails)
+    recipients = [email for email in [email_to_1, email_to_2] if email.strip()]
+    to_email = ', '.join(recipients)
 
     # Email subject
     subject = f"New Sales Quote: {data.get('account_name', 'Unknown Account')}"
