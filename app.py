@@ -653,7 +653,121 @@ def get_account_data():
     except Exception as e:
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
 
+@app.route('/api/dashboard', methods=['GET'])
+def dashboard():
+    CURRENT_YEAR = datetime.now().year
+    
+    def get_account_data(instance_url, access_token, amazon_site_code):
+    # Prepare SOQL
+        fields = [
+            "Battery_Blade_Connector_Count__c", "Battery_POGO_Connector_Count__c",
+            "Charger_Blade_Connector_Count__c", "Charger_POGO_Connector_Count__c",
+            "Controller_Blade_Connector_Count__c", "Controller_POGO_Connector_Count__c",
+            "DTG_Retrofit_Kit_Count__c", "PS_Security_Cart_Count__c",
+            "PS_Slam_Cart_Count__c", "PS_Cart_Count__c", "PS_Loss_Prevention_Cart_Count__c",
+            "Battery_Expiration_2022__c", "Battery_Expiration_2023__c",
+            "Battery_Expiration_2024__c", "Battery_Expiration_2025__c",
+            "Battery_Expiration_2026__c", "Battery_Expiration_2027__c",
+            "Battery_Expiration_2028__c", "Battery_Expiration_2029__c"
+        ]
+        field_str = ", ".join(fields)
+        soql = (
+            f"SELECT {field_str} FROM Account "
+            f"WHERE Amazon_Site_Code__c = '{amazon_site_code}'"
+        )
+        url = f"{instance_url}/services/data/v60.0/query"
+        headers = {"Authorization": f"Bearer {access_token}"}
+        params = {"q": soql}
+        resp = requests.get(url, headers=headers, params=params)
+        resp.raise_for_status()
+        results = resp.json()
+        if not results["records"]:
+            raise ValueError(f"No account found for Amazon_Site_Code__c = {amazon_site_code}")
+        # Get the first record (should only be one)
+        account_info = {}
+        account_info['product'] = results["records"][0]
+        # Open orders
+        open_query = (
+            f"SELECT COUNT() FROM gii__SalesOrder__c "
+            f"WHERE gii__Account__r.Amazon_Site_Code__c = '{amazon_site_code}' AND gii__Status__c = 'Open'"
+        )
+        open_url = f"{instance_url}/services/data/v60.0/query"
+        open_response = requests.get(open_url, headers=headers, params={"q": open_query})
+        open_orders = open_response.json().get("totalSize", 0)
+        account_info['open_order'] = open_orders
+        
+        # Open quotes
+        open_query = (
+            f"SELECT COUNT() FROM gii__SalesQuote__c "
+            f"WHERE gii__Account__r.Amazon_Site_Code__c = '{amazon_site_code}' AND gii__Status__c = 'Open'"
+        )
+        open_url = f"{instance_url}/services/data/v60.0/query"
+        open_response = requests.get(open_url, headers=headers, params={"q": open_query})
+        open_quotes = open_response.json().get("totalSize", 0)
+        account_info['open_quote'] = open_quotes
 
+        return account_info
+
+
+    def process_account_data(account):
+        # --- Product Summary ---
+        product_types = {
+            "Battery Blade Connector": "Battery_Blade_Connector_Count__c",
+            "Battery Pogo Connector": "Battery_POGO_Connector_Count__c",
+            "Charger - Blade Connector": "Charger_Blade_Connector_Count__c",
+            "Charger - Pogo Connector": "Charger_POGO_Connector_Count__c",
+            "Controller - Blade Connector": "Controller_Blade_Connector_Count__c",
+            "Controller - Pogo Connector": "Controller_POGO_Connector_Count__c",
+            "DTG Power Retrofit Kit": "DTG_Retrofit_Kit_Count__c",
+            "DTG Problem Solver Security Cart": "PS_Security_Cart_Count__c",
+            "DTG Slam Cart": "PS_Slam_Cart_Count__c",
+            "Problem Solver Cart": "PS_Cart_Count__c",
+            "Problem Solver Loss Prevention Cart": "PS_Loss_Prevention_Cart_Count__c"
+        }
+        product_summary = []
+        for name, field in product_types.items():
+            qty = account.get(field, 0) or 0
+            if qty > 0:
+                product_summary.append({"type": name, "quantity": qty})
+
+        blade_expiry = []
+        for year in range(2025, 2030):
+            field = f"Battery_Expiration_{year}__c"
+            qty = account.get(field, 0) or 0
+            status = "good"
+            if year == CURRENT_YEAR and qty > 0:
+                status = "upgrade"
+            blade_expiry.append({"year": year, "quantity": qty, "status":status})
+            # If you have separate Pogo expiry, replace above line with real field
+            # For now, treat all as Blade if that's your convention
+
+        return {
+            "product_summary": product_summary,
+            "batch_expiry": blade_expiry,
+        }
+    access_token, instance_url = get_salesforce_access_token(
+        client_id=os.getenv('SALESFORCE_CLIENT_ID'),
+        client_secret=os.getenv('SALESFORCE_CLIENT_SECRET'),
+        username=os.getenv('SALESFORCE_USERNAME'),
+        password=os.getenv('SALESFORCE_PASSWORD'),
+        security_token=os.getenv('SALESFORCE_SECURITY_TOKEN')
+    )
+    site_code =  request.args.get('site_code')
+    account_data = {}
+
+    account = get_account_data(instance_url, access_token, site_code)
+    dashboard_data = process_account_data(account['product'])
+    account_data["part1"] = {"order":account["open_order"], "quotes":account["open_quote"]}
+    account_data["part_2"] = dashboard_data
+    insights = {"text":"No Batteries To Replace", "quantity":None, "type":"positive"}
+    for x in dashboard_data['batch_expiry']:
+        if int(x['year']) == CURRENT_YEAR and x['status'] == 'upgrade':
+            insights = {"text":"Batteries Expiring Soon", "quantity":x['quantity'], "type":"alert"}
+            break
+
+    account_data["part_3"] = insights
+
+    return jsonify(account_data), 200
 
 
 if __name__ == '__main__':
