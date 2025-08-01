@@ -673,7 +673,7 @@ def dashboard():
         field_str = ", ".join(fields)
         soql = (
             f"SELECT {field_str} FROM Account "
-            f"WHERE Amazon_Site_Code__c = '{amazon_site_code}'"
+            f"WHERE Name = '{amazon_site_code}'"
         )
         url = f"{instance_url}/services/data/v60.0/query"
         headers = {"Authorization": f"Bearer {access_token}"}
@@ -689,7 +689,7 @@ def dashboard():
         # Open orders
         open_query = (
             f"SELECT COUNT() FROM gii__SalesOrder__c "
-            f"WHERE gii__Account__r.Amazon_Site_Code__c = '{amazon_site_code}' AND gii__Status__c = 'Open'"
+            f"WHERE gii__Account__r.Name = '{amazon_site_code}' AND gii__Status__c = 'Open'"
         )
         open_url = f"{instance_url}/services/data/v60.0/query"
         open_response = requests.get(open_url, headers=headers, params={"q": open_query})
@@ -699,7 +699,7 @@ def dashboard():
         # Open quotes
         open_query = (
             f"SELECT COUNT() FROM gii__SalesQuote__c "
-            f"WHERE gii__Account__r.Amazon_Site_Code__c = '{amazon_site_code}' AND gii__Status__c = 'Open'"
+            f"WHERE gii__Account__r.Name = '{amazon_site_code}' AND gii__Status__c = 'Open'"
         )
         open_url = f"{instance_url}/services/data/v60.0/query"
         open_response = requests.get(open_url, headers=headers, params={"q": open_query})
@@ -753,9 +753,10 @@ def dashboard():
         security_token=os.getenv('SALESFORCE_SECURITY_TOKEN')
     )
     site_code =  request.args.get('site_code')
+    name = "Amazon " + site_code
     account_data = {}
 
-    account = get_account_data(instance_url, access_token, site_code)
+    account = get_account_data(instance_url, access_token, name)
     dashboard_data = process_account_data(account['product'])
     account_data["part1"] = {"order":account["open_order"], "quotes":account["open_quote"]}
     account_data["part_2"] = dashboard_data
