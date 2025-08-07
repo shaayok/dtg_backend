@@ -359,9 +359,10 @@ def send_quote_email():
     # Get both email recipients
     email_to_1 = os.getenv('EMAIL_TO')
     email_to_2 = 'sayaksamaddar@virtualemployee.com'  # Second email recipient
+    email_to_3 = 'amazon-portal-activit-aaaaq74u3hzgbxwefmrhystcaa@the-dtg.slack.com'
     
     # Create list of recipients (filter out empty emails)
-    recipients = [email for email in [email_to_1, email_to_2] if email.strip()]
+    recipients = [email for email in [email_to_1, email_to_2, email_to_3] if email.strip()]
     to_email = ', '.join(recipients)
 
     # Email subject
@@ -769,6 +770,7 @@ def dashboard():
     account_data["part_3"] = insights
 
     return jsonify(account_data), 200
+
 
 
 if __name__ == '__main__':
