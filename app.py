@@ -771,7 +771,62 @@ def dashboard():
 
     return jsonify(account_data), 200
 
+@app.route('/update-address', methods=['POST'])
+def update_address():
+    data = request.get_json()
+    # Get the account name from the request
+    account_name = data.get('account_name') or data.get('site_code')  # Accept 'account_name' or 'site_code'
+    if not account_name:
+        return jsonify({'error': 'account_name or site_code is required'}), 400
 
+    # Get the address fields
+    shipping_data = {}
+    if data.get('address_line_1'):
+        shipping_data["ShippingStreet"] = data.get('address_line_1')
+    if data.get('city'):
+        shipping_data["ShippingCity"] = data.get('city')
+    if data.get('state'):
+        shipping_data["ShippingState"] = data.get('state')
+    if data.get('zip'):
+        shipping_data["ShippingPostalCode"] = data.get('zip')
+    if data.get('country'):
+        shipping_data["ShippingCountry"] = data.get('country')
+    # Optionally, add Address Line 2
+    if data.get('address_line_2'):
+        shipping_data["ShippingStreet"] += f"\n{data.get('address_line_2')}"
+    
+    # Authenticate with Salesforce
+    access_token, instance_url = get_salesforce_access_token(
+        client_id=os.getenv('SALESFORCE_CLIENT_ID'),
+        client_secret=os.getenv('SALESFORCE_CLIENT_SECRET'),
+        username=os.getenv('SALESFORCE_USERNAME'),
+        password=os.getenv('SALESFORCE_PASSWORD'),
+        security_token=os.getenv('SALESFORCE_SECURITY_TOKEN')
+    )
+
+    # Find Account ID by Name
+    soql = f"SELECT Id FROM Account WHERE Name = '{account_name}'"
+    soql_url = f"{instance_url}/services/data/v60.0/query"
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json"
+    }
+    resp = requests.get(soql_url, headers=headers, params={'q': soql})
+    if resp.status_code != 200:
+        return jsonify({'error': 'Failed to query Account', 'details': resp.text}), 500
+
+    records = resp.json().get('records', [])
+    if not records:
+        return jsonify({'error': f"Account '{account_name}' not found"}), 404
+    account_id = records[0]['Id']
+
+    # Update Shipping Address
+    update_url = f"{instance_url}/services/data/v60.0/sobjects/Account/{account_id}"
+    update_resp = requests.patch(update_url, json=shipping_data, headers=headers)
+    if update_resp.status_code == 204:
+        return jsonify({'status': 'success', 'message': 'Shipping address updated'})
+    else:
+        return jsonify({'status': 'fail', 'error': update_resp.text}), update_resp.status_code
 
 if __name__ == '__main__':
     app.run(debug=True, port=os.getenv('PORT', 5000))

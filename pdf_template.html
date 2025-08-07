@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Quotation</title>
+  <style>
+    body { font-family: Arial, sans-serif; font-size: 15px; color: #111; margin: 0; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; padding: 32px 48px 0 48px; }
+    .logo { height: 60px; }
+    .quote-info { text-align: right; }
+    .quote-title { font-size: 2.3rem; font-weight: bold; margin-bottom: 0.2em; }
+    .company-details { padding: 0 48px 8px 48px; }
+    .contact { margin-top: 8px; }
+    .address-row { display: flex; justify-content: space-between; padding: 16px 48px 6px 48px; }
+    .bill-ship { width: 45%; }
+    .label { font-weight: bold; }
+    .table-section { padding: 0 48px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 24px; }
+    th, td { border: 1px solid #222; padding: 10px 6px; }
+    th { background: #333; color: #fff; font-size: 1em; }
+    .inner-table th, .inner-table td { border: none; background: #fff; }
+    .row-label { background: #f3f3f3; font-weight: bold; }
+    .desc-table th, .desc-table td { border: 1px solid #222; }
+    .desc-table th { background: #333; color: #fff; }
+    .desc-table td { vertical-align: top; }
+    .notes-section { padding: 24px 48px 0 48px; }
+    .notes-box { border: 1px solid #222; padding: 14px; min-height: 40px; }
+    .total-row td { font-weight: bold; }
+    .text-right { text-align: right; }
+    .text-center { text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <img class="logo" src="https://i.ibb.co/zPz4Tbh/dtg-logo.png" alt="DTG Logo"/>
+    <div class="quote-info">
+      <div class="quote-title">Quotation</div>
+      <div><b>{{quote_number}}</b></div>
+      <div>{{quote_date}}</div>
+    </div>
+  </div>
+  <div class="company-details">
+    <div><b>35 Upton Dr</b></div>
+    <div>Wilmington, MA 01887</div>
+    <div class="contact">978-532-0444</div>
+  </div>
+  <div class="address-row">
+    <div class="bill-ship">
+      <span class="label">Bill To:</span><br/>
+      {{bill_to}}
+    </div>
+    <div class="bill-ship">
+      <span class="label">Ship To:</span><br/>
+      {{ship_to}}
+    </div>
+  </div>
+  <div class="table-section">
+    <table>
+      <tr>
+        <th>Customer</th>
+        <th>Ship Via</th>
+        <th>FOB</th>
+        <th>Terms</th>
+        <th>Due Date</th>
+        <th>Rep</th>
+      </tr>
+      <tr>
+        <td>{{customer}}</td>
+        <td>{{ship_via}}</td>
+        <td>{{fob}}</td>
+        <td>{{terms}}</td>
+        <td>{{due_date}}</td>
+        <td>{{rep}}</td>
+      </tr>
+    </table>
+    <table class="desc-table">
+      <tr>
+        <th>Description</th>
+        <th>Part #</th>
+        <th>QTY</th>
+        <th>Unit Price</th>
+        <th>Ext Price</th>
+        <th>MSRP</th>
+      </tr>
+      {% for item in items %}
+      <tr>
+        <td>{{item.description}}</td>
+        <td>{{item.part_number}}</td>
+        <td class="text-center">{{item.qty}}</td>
+        <td class="text-right">{{item.unit_price}}</td>
+        <td class="text-right">{{item.ext_price}}</td>
+        <td class="text-right">{{item.msrp}}</td>
+      </tr>
+      {% endfor %}
+      <tr class="total-row">
+        <td colspan="4"></td>
+        <td class="text-right">Total</td>
+        <td class="text-right">{{total}}</td>
+      </tr>
+    </table>
+  </div>
+  <div class="notes-section">
+    <div><b>Notes:</b></div>
+    <div class="notes-box">{{notes}}</div>
+  </div>
+</body>
+</html>
