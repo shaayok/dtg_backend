@@ -442,12 +442,12 @@ def get_account_data():
         return records[0]["Id"] if records else None
 
     def get_product_details(product_id):
-        query = f"SELECT Name, Amazon_Manual_Price__c, gii__Description__c FROM gii__Product2Add__c WHERE Id = '{product_id}' LIMIT 1"
+        query = f"SELECT Name, Amazon_Price__c, gii__Description__c FROM gii__Product2Add__c WHERE Id = '{product_id}' LIMIT 1"
         url = f"{instance_url}/services/data/v60.0/query?q={urllib.parse.quote(query)}"
         r = requests.get(url, headers=headers)
         records = r.json().get("records", [])
         if records:
-            return records[0]["Name"], records[0].get("Amazon_Manual_Price__c", "N/A"), records[0].get("gii__Description__c", "N/A")
+            return records[0]["Name"], records[0].get("Amazon_Price__c", "N/A"), records[0].get("gii__Description__c", "N/A")
         return "Unknown", "N/A", "N/A"
 
     def get_sales_orders(account_id, page=1):
