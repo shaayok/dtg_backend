@@ -187,7 +187,8 @@ def quote():
             "gii__Account__c": account_id,
             "Quote_Name__c": f"Test Quote on {datetime.strftime(datetime.now(),'%d %B %Y %H:%M')}",
             "gii__Status__c": "Open",
-            "gii__SalesRepresentative__c": "0031I000009dExWQAU"
+            "gii__SalesRepresentative__c": "0031I000009dExWQAU",
+            "OwnerId": "0051I000001qk6a",
         }
         r = requests.post(url, headers=headers, json=payload)
         if r.status_code == 201:
@@ -441,18 +442,18 @@ def get_account_data():
         return records[0]["Id"] if records else None
 
     def get_product_details(product_id):
-        query = f"SELECT Name, gii__StandardPrice__c, gii__Description__c FROM gii__Product2Add__c WHERE Id = '{product_id}' LIMIT 1"
+        query = f"SELECT Name, Amazon_Manual_Price__c, gii__Description__c FROM gii__Product2Add__c WHERE Id = '{product_id}' LIMIT 1"
         url = f"{instance_url}/services/data/v60.0/query?q={urllib.parse.quote(query)}"
         r = requests.get(url, headers=headers)
         records = r.json().get("records", [])
         if records:
-            return records[0]["Name"], records[0].get("gii__StandardPrice__c", "N/A"), records[0].get("gii__Description__c", "N/A")
+            return records[0]["Name"], records[0].get("Amazon_Manual_Price__c", "N/A"), records[0].get("gii__Description__c", "N/A")
         return "Unknown", "N/A", "N/A"
 
     def get_sales_orders(account_id, page=1):
         offset = (page - 1) * 5
         query = f"""
-        SELECT Id, gii__CustomerPONumber__c, gii__Status__c, gii__OrderType__c, gii__OrderStatus__c, 
+        SELECT Id, Name, gii__Status__c, gii__OrderType__c, gii__OrderStatus__c, 
             gii__SalesQuote__c, gii__SalesQuote__r.Quote_Name__c, gii__OrderDate__c
         FROM gii__SalesOrder__c 
         WHERE gii__Account__c = '{account_id}'
@@ -472,7 +473,7 @@ def get_account_data():
     def get_sales_quotes(account_id, page=1):
         offset = (page - 1) * 5
         query = f"""
-        SELECT Id, Quote_Name__c, gii__Status__c, gii__QuoteDate__c 
+        SELECT Id, Name, gii__Status__c, gii__QuoteDate__c 
         FROM gii__SalesQuote__c 
         WHERE gii__Account__c = '{account_id}'
         ORDER BY gii__QuoteDate__c DESC
@@ -584,12 +585,12 @@ def get_account_data():
             for order in orders:
                 # Get related quote information if exists
                 quote_id = order.get('gii__SalesQuote__c')
-                quote_name = order.get('gii__SalesQuote__r', {}).get('Quote_Name__c') if order.get('gii__SalesQuote__r') else None
+                quote_name = order.get('gii__SalesQuote__r', {}).get('Name') if order.get('gii__SalesQuote__r') else None
                 quote_link = f"{instance_url}/lightning/r/gii__SalesQuote__c/{quote_id}/view" if quote_id else None
                 shipments = get_shipments_for_order(order["Id"])
                 
                 order_data = {
-                    "name": order['gii__CustomerPONumber__c'],
+                    "name": order['Name'],
                     "status": order['gii__Status__c'],
                     "quote_id": quote_id,
                     "quote_name": quote_name,
@@ -624,7 +625,7 @@ def get_account_data():
             total_quotes, open_quotes = get_quote_stats(account_id)
             for quote in quotes:
                 quote_data = {
-                    "name": quote['Quote_Name__c'],
+                    "name": quote['Name'],
                     "status": quote['gii__Status__c'],
                     "lines": []
                 }
