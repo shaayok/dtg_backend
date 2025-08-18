@@ -12,6 +12,7 @@ from email.mime.multipart import MIMEMultipart
 import re
 import os
 from dotenv import load_dotenv
+from pdf_creator_1 import send_test_email_with_pdf
 load_dotenv()   
 
 
@@ -193,10 +194,21 @@ def quote():
         r = requests.post(url, headers=headers, json=payload)
         if r.status_code == 201:
             print("✅ Created Sales Quote")
+            print(r.json())
             return r.json()['id']
         else:
             print("❌ Failed to create Sales Quote:", r.text)
             return None
+        
+    def get_sales_quotes_name(quote_id):
+        query = f"""
+        SELECT Id, Name, gii__Status__c, gii__QuoteDate__c 
+        FROM gii__SalesQuote__c 
+        WHERE Id = '{quote_id}'
+        """     
+        url = f"{instance_url}/services/data/v60.0/query?q={urllib.parse.quote(query)}"
+        r = requests.get(url, headers=headers)
+        return r.json().get("records", [])
 
     def create_sales_quote_line(sales_quote_id, product_id, quantity):
         url = f"{instance_url}/services/data/v60.0/sobjects/gii__SalesQuoteLine__c/"
@@ -262,8 +274,18 @@ def quote():
             except Exception as e:
                 print("Background email failed:", e)
         threading.Thread(target=_go, daemon=True).start()
+    
+    def send_email_pdf(payload):
+        def _go():
+            try:
+                # Update with your email API endpoint (can be localhost or ngrok URL)
+                requests.post("http://localhost:5000/api/send-pdf-email", json=payload, timeout=10)
+            except Exception as e:
+                print("Background email failed:", e)
+        threading.Thread(target=_go, daemon=True).start()
 
     # At the end of quote() BEFORE return:
+    quote_info = get_sales_quotes_name(sales_quote_id)
     send_email_async({
         "link": link,  # Salesforce quote link
         "created_by_email": user.get('auth', {}).get('email', ''),
@@ -272,8 +294,14 @@ def quote():
         "account_name": account_name,
         "address_changed": change,
         "shipping_address": shipping_address,
-        "products": products
+        "products": products,
+        "name": quote_info[0].get("Name") if quote_info else "Unknown"
     })
+
+    send_email_pdf({"created_by_email": user.get('auth', {}).get('email', ''),
+                              "quote_id": sales_quote_id,
+                              "account_name": account_name,
+                              "shipping_address": shipping_address})
 
     # # Create Sales Order
     # sales_order_id = create_sales_order(account_id)
@@ -290,6 +318,86 @@ def quote():
     return jsonify({"status": True,
                    "message": "Sales Quote created successfully",
                     "link": link}), 200
+
+@app.route('/api/send-pdf-email', methods=['POST'])
+def send_pdf_email():
+    def get_sales_quote_lines(quote_id):
+        query = f"SELECT Id, gii__Product__c, gii__OrderQuantity__c FROM gii__SalesQuoteLine__c WHERE gii__SalesQuote__c = '{quote_id}'"
+        url = f"{instance_url}/services/data/v60.0/query?q={urllib.parse.quote(query)}"
+        r = requests.get(url, headers=headers)
+        return r.json().get("records", [])
+    
+    def get_product_details(product_id):
+        query = f"SELECT Name, Amazon_Price__c, gii__Description__c FROM gii__Product2Add__c WHERE Id = '{product_id}' LIMIT 1"
+        url = f"{instance_url}/services/data/v60.0/query?q={urllib.parse.quote(query)}"
+        r = requests.get(url, headers=headers)
+        records = r.json().get("records", [])
+        if records:
+            return records[0]["Name"], records[0].get("Amazon_Price__c", "N/A"), records[0].get("gii__Description__c", "N/A")
+        return "Unknown", "N/A", "N/A"
+    
+    def get_sales_quotes_name(quote_id):
+        query = f"""
+        SELECT Id, Name, gii__Status__c, gii__QuoteDate__c 
+        FROM gii__SalesQuote__c 
+        WHERE Id = '{quote_id}'
+        """     
+        url = f"{instance_url}/services/data/v60.0/query?q={urllib.parse.quote(query)}"
+        r = requests.get(url, headers=headers)
+        return r.json().get("records", [])
+    def format_shipping_address(addr: dict) -> str:
+        """Safely combine address parts into a single string with newlines."""
+        parts = [
+            addr.get("street", ""),
+            " ".join([addr.get("city",""), addr.get("state",""), addr.get("postal_code","")]).strip(),
+            addr.get("country", "")
+        ]
+        return "\n".join([p for p in parts if p])   # remove empty parts
+
+    
+    access_token, instance_url = get_salesforce_access_token(
+        client_id=os.getenv('SALESFORCE_CLIENT_ID'),
+        client_secret=os.getenv('SALESFORCE_CLIENT_SECRET'),
+        username=os.getenv('SALESFORCE_USERNAME'),
+        password=os.getenv('SALESFORCE_PASSWORD'),
+        security_token=os.getenv('SALESFORCE_SECURITY_TOKEN')
+    )
+    #print('Generated Access Token and Instance URL')
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json"
+    }
+    data = request.get_json()
+    quote_id = data.get("quote_id")
+    quote_info = get_sales_quotes_name(quote_id)
+    quote_data = {
+                    "name": quote_info[0]['Name'],
+                    "status": quote_info[0]['gii__Status__c'],
+                    "shipping_address":format_shipping_address(data.get("shipping_address")),
+                    "account_name": data.get("account_name"),
+                    "creator": data.get("created_by_email", ""),
+                    "lines": []
+                }
+    quote_lines = get_sales_quote_lines(quote_id)
+    for ql in quote_lines:
+        pname, pprice, pdescription = get_product_details(ql["gii__Product__c"])
+        # Convert price to float, handle "N/A" case
+        try:
+            price_float = float(pprice) if pprice != "N/A" else 0.0
+        except (ValueError, TypeError):
+            price_float = 0.0
+            
+        line_data = {
+            "name": pname,
+            "qty": ql['gii__OrderQuantity__c'],
+            "price": price_float,
+            "description": pdescription
+        }
+        quote_data["lines"].append(line_data)
+    print("Quote data prepared for PDF:", quote_data)    
+    send_test_email_with_pdf(quote_data)
+    return jsonify(quote_data)
+    
 
 
 @app.route('/api/fetch-address', methods=['POST'])
@@ -373,7 +481,7 @@ def send_quote_email():
     html = f"""
     <html>
     <body>
-        <h2>New Sales Quote Created</h2>
+        <h2>New Sales Quote Created {data.get('name', 'Unknown Quote')}</h2>
         <p><b>Account:</b> {data.get('account_name','')}</p>
         <p><b>Created by:</b> {data.get('first_name','')} {data.get('last_name','')} ({data.get('created_by_email','')})</p>
         <p><b>Address Changed?</b> {"Yes" if data.get('address_changed') == "Y" else "No"}</p>
