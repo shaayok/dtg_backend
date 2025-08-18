@@ -75,7 +75,7 @@ def build_quote_pdf_bytes(data: dict) -> bytes:
     # --- Header (logo + quote info) ---
     #logo_stream = _fetch_logo_bytes(data.get("logo_url") or "https://i.ibb.co/hvF4nWd/dtg-logo.png")
     logo_path = "DTG_Logo_Black.png"
-    logo = Image(logo_path, width=2.1*inch, height=0.85*inch)
+    logo = Image(logo_path, width=2.1*inch, height=0.65*inch)
 
     quote_no = data.get("name") or "QUOTE"
     quote_dt = data.get("quote_date") or datetime.utcnow().strftime("%B %d, %Y")
