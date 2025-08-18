@@ -183,19 +183,23 @@ def quote():
             print(f"❌ Failed to create line for {product_id}: {r.text}")
     
     def create_sales_quote(account_id):
+        email = user.get('auth', {}).get('email', '')
+        now = datetime.now()
+        unique_key = f"{email}_{now.strftime('%Y%m%d%H%M%S%f')}"
         url = f"{instance_url}/services/data/v60.0/sobjects/gii__SalesQuote__c/"
         payload = {
             "gii__Account__c": account_id,
-            "Quote_Name__c": f"Test Quote on {datetime.strftime(datetime.now(),'%d %B %Y %H:%M')}",
+            "Quote_Name__c": f"Test Quote on {now.strftime('%d %B %Y %H:%M')}",
             "gii__Status__c": "Open",
             "gii__SalesRepresentative__c": "0031I000009dExWQAU",
             "OwnerId": "0051I000001qk6a",
+            "Portal_Request__c": unique_key
         }
         r = requests.post(url, headers=headers, json=payload)
         if r.status_code == 201:
             print("✅ Created Sales Quote")
             print(r.json())
-            return r.json()['id']
+            return (r.json()['id'], unique_key)
         else:
             print("❌ Failed to create Sales Quote:", r.text)
             return None
@@ -244,7 +248,7 @@ def quote():
         if not account_id:
             raise Exception("Failed to create account")
     
-    sales_quote_id = create_sales_quote(account_id)
+    sales_quote_id, portal_key = create_sales_quote(account_id)
     if not sales_quote_id:
         raise Exception("Cannot proceed without a sales quote.")
 
@@ -295,7 +299,8 @@ def quote():
         "address_changed": change,
         "shipping_address": shipping_address,
         "products": products,
-        "name": quote_info[0].get("Name") if quote_info else "Unknown"
+        "name": quote_info[0].get("Name") if quote_info else "Unknown",
+        "portal_request": portal_key
     })
 
     send_email_pdf({"created_by_email": user.get('auth', {}).get('email', ''),
@@ -485,6 +490,7 @@ def send_quote_email():
         <p><b>Account:</b> {data.get('account_name','')}</p>
         <p><b>Created by:</b> {data.get('first_name','')} {data.get('last_name','')} ({data.get('created_by_email','')})</p>
         <p><b>Address Changed?</b> {"Yes" if data.get('address_changed') == "Y" else "No"}</p>
+        <p><b>Portal Request Id</b> {data.get('portal_request', '')}</p>
         <p><b>Shipping Address:</b><br>
             {data.get('shipping_address', {}).get('street', '')}<br>
             {data.get('shipping_address', {}).get('city', '')}, {data.get('shipping_address', {}).get('state', '')} {data.get('shipping_address', {}).get('postal_code', '')}
