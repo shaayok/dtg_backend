@@ -306,7 +306,8 @@ def quote():
     send_email_pdf({"created_by_email": user.get('auth', {}).get('email', ''),
                               "quote_id": sales_quote_id,
                               "account_name": account_name,
-                              "shipping_address": shipping_address})
+                              "shipping_address": shipping_address,
+                              "first_name": user.get('customFields', {}).get('first-name', '')})
 
     # # Create Sales Order
     # sales_order_id = create_sales_order(account_id)
@@ -381,6 +382,7 @@ def send_pdf_email():
                     "shipping_address":format_shipping_address(data.get("shipping_address")),
                     "account_name": data.get("account_name"),
                     "creator": data.get("created_by_email", ""),
+                    "first_name": data.get("first_name", ""),
                     "lines": []
                 }
     quote_lines = get_sales_quote_lines(quote_id)
