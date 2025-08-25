@@ -945,5 +945,55 @@ def update_address():
     else:
         return jsonify({'status': 'fail', 'error': update_resp.text}), update_resp.status_code
 
+@app.route("/api/update-member", methods=["POST"])
+def update_member():
+    data = request.get_json()
+    MS_SECRET = os.getenv("MEMBERSTACK_SECRET")
+    BASE_URL = "https://admin.memberstack.com"
+    HEADERS = {"X-API-KEY": MS_SECRET, "Content-Type": "application/json"}
+
+    def get_member_id_by_email(email):
+        url = f"{BASE_URL}/members/{urllib.parse.quote(email)}"
+        resp = requests.get(url, headers=HEADERS, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+        return data.get("id") or (data.get("data") or {}).get("id")
+
+    try:
+        email = data["email"]
+        first_name = data.get("firstName")
+        last_name = data.get("lastName")
+        job_title = data.get("jobTitle")
+        amazon_site = data.get("amazonSite")
+
+        # Step 1: lookup member ID
+        member_id = get_member_id_by_email(email)
+        if not member_id:
+            return jsonify({"error": "Member not found"}), 404
+
+        # Step 2: update member fields
+        payload = {
+            "customFields": {
+                "first-name": first_name,
+                "last-name": last_name,
+                "job-title": job_title,
+                "amazon-site": amazon_site
+            }
+        }
+        resp = requests.patch(
+            f"{BASE_URL}/members/{member_id}",
+            headers=HEADERS,
+            json=payload,
+            timeout=10
+        )
+        resp.raise_for_status()
+
+        return jsonify({"status": "success", "memberId": member_id, "updated": resp.json()})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+
 if __name__ == '__main__':
     app.run(debug=True, port=os.getenv('PORT', 5000))
