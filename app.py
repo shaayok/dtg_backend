@@ -965,14 +965,29 @@ def update_member():
         last_name = data.get("lastName")
         job_title = data.get("jobTitle")
         amazon_site = data.get("amazonSite")
+        managed_accounts = data.get("managedAccounts")
 
+        
+        print(managed_accounts)
         # Step 1: lookup member ID
         member_id = get_member_id_by_email(email)
         if not member_id:
             return jsonify({"error": "Member not found"}), 404
 
         # Step 2: update member fields
-        payload = {
+        if managed_accounts:
+            m_a_str = ", ".join(managed_accounts)
+            payload = {
+                "customFields": {
+                    "first-name": first_name,
+                    "last-name": last_name,
+                    "job-title": job_title,
+                    "amazon-site": amazon_site,
+                    "managed-accounts": m_a_str
+                }
+            }
+        else:
+            payload = {
             "customFields": {
                 "first-name": first_name,
                 "last-name": last_name,
@@ -980,6 +995,37 @@ def update_member():
                 "amazon-site": amazon_site
             }
         }
+        print("Payload:", payload)
+        resp = requests.patch(
+            f"{BASE_URL}/members/{member_id}",
+            headers=HEADERS,
+            json=payload,
+            timeout=10
+        )
+        resp.raise_for_status()
+
+        return jsonify({"status": "success", "memberId": member_id, "updated": resp.json()})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    
+@app.route("/api/drop_update", methods=["POST"])
+def update_member_drop():
+    data = request.get_json()
+    MS_SECRET = os.getenv("MEMBERSTACK_SECRET")
+    BASE_URL = "https://admin.memberstack.com"
+    HEADERS = {"X-API-KEY": MS_SECRET, "Content-Type": "application/json"}
+
+
+    try:
+        member_id = data.get("id")
+        amazon_site = data.get("amazonSite")
+        payload = {
+            "customFields": {
+                "amazon-site": amazon_site
+            }
+        }
+        print("Payload:", payload)
         resp = requests.patch(
             f"{BASE_URL}/members/{member_id}",
             headers=HEADERS,
@@ -1827,6 +1873,142 @@ def get_sites():
     q = request.args.get("q", "").lower()
     results = [s for s in ALL_SITES if q in s.lower()] if q else ALL_SITES
     return jsonify(results[:50])
+
+@app.route('/api/contact_crud')
+def contact_create_update():
+
+
+    # ---- Helpers ----
+    def query_soql(soql):
+        url = f"{instance_url}/services/data/v61.0/query"
+        resp = requests.get(url, headers=headers, params={"q": soql})
+        resp.raise_for_status()
+        return resp.json()
+
+    def create_record(object_name, data):
+        url = f"{instance_url}/services/data/v61.0/sobjects/{object_name}/"
+        resp = requests.post(url, headers=headers, json=data)
+        if not resp.ok:
+            print("Salesforce Error:", resp.text)  # <--- debug payload
+            resp.raise_for_status()
+        return resp.json()["id"]
+
+
+    # ---- Input ----
+    access_token, instance_url = get_salesforce_access_token(
+        client_id=os.getenv('SALESFORCE_CLIENT_ID'),
+        client_secret=os.getenv('SALESFORCE_CLIENT_SECRET'),
+        username=os.getenv('SALESFORCE_USERNAME'),
+        password=os.getenv('SALESFORCE_PASSWORD'),
+        security_token=os.getenv('SALESFORCE_SECURITY_TOKEN')
+    )
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json"
+    }
+    
+    data = request.json
+    primary_account_name = data.get("amazonSite")
+    managed_accounts = data.get("managedAccounts", [])
+    email = data.get("email")
+    first_name = data.get("firstName")
+    last_name = data.get("lastName")
+
+    # ---- Step 1: Get or Create Primary Account ----
+    accs = query_soql(f"SELECT Id FROM Account WHERE Name = '{primary_account_name}'")
+    if accs["totalSize"] == 0:
+        account_id = create_record("Account", {"Name": primary_account_name})
+    else:
+        account_id = accs["records"][0]["Id"]
+
+    # ---- Step 2: Get or Create Contact ----
+    cts = query_soql(f"SELECT Id FROM Contact WHERE Email = '{email}'")
+    if cts["totalSize"] == 0:
+        contact_data = {
+            "FirstName": first_name,
+            "LastName": last_name,
+            "Email": email,
+            "AccountId": account_id,
+            "Department__c": "Sales",
+            "Status__c": "Prospect",
+            "Contact_Type__c": "End User",
+            "LeadSource": "Website",
+            "OwnerId": "0051I000001qk6a"
+        }
+        contact_id = create_record("Contact", contact_data)
+    else:
+        contact_id = cts["records"][0]["Id"]
+
+    # ---- Step 3: Create AccountContactRelation for Managed Accounts ----
+    for acc_name in managed_accounts:
+        sec = query_soql(f"SELECT Id FROM Account WHERE Name = '{acc_name}'")
+        if sec["totalSize"] > 0:
+            sec_id = sec["records"][0]["Id"]
+            try:
+                create_record("AccountContactRelation", {
+                    "AccountId": sec_id,
+                    "ContactId": contact_id
+                })
+            except Exception as e:
+                print(f"Failed linking {email} to {acc_name}: {e}")
+
+    print(f"Contact {first_name} {last_name} ({email}) linked to {primary_account_name} + managed accounts.")
+
+@app.route('/api/send-account-request-email', methods=['POST'])
+def send_account_request_email():
+    data = request.json
+    if not data:
+        return jsonify({"status": False, "error": "Missing or invalid JSON body"}), 400
+
+    # Email config
+    gmail_user = os.getenv('GMAIL_USER')
+    gmail_app_password = os.getenv('GMAIL_APP_PASSWORD')
+    
+    # Recipients
+    email_to_1 = os.getenv('EMAIL_TO')
+    email_to_2 = 'ngardner@dtgpower.com'
+    email_to_3 = 'amazon-portal-activit-aaaaq74u3hzgbxwefmrhystcaa@the-dtg.slack.com'
+
+    recipients = [email for email in [email_to_1, email_to_2, email_to_3] if email and email.strip()]
+    to_email = ', '.join(recipients)
+
+    # Email subject
+    subject = f"New Account Request from {data.get('email', 'Unknown User')}"
+
+    # Pretty HTML body
+    html = f"""
+    <html>
+    <body>
+        <h2>New Account Request Submitted</h2>
+        <p><b>Requested by:</b> {data.get('email','')}</p>
+        <p><b>Accounts Requested:</b></p>
+        <ul>
+            {''.join([f"<li>{acc}</li>" for acc in data.get('managedAccounts', [])])}
+        </ul>
+        <br>
+        <p style="color:#888;">This is an automated notification.</p>
+    </body>
+    </html>
+    """
+
+    # Build email
+    msg = MIMEMultipart("alternative")
+    msg['Subject'] = subject
+    msg['From'] = gmail_user
+    msg['To'] = to_email
+    msg.attach(MIMEText(html, 'html'))
+
+    try:
+        with smtplib.SMTP('smtp.gmail.com', 587) as server:
+            server.starttls()
+            server.login(gmail_user, gmail_app_password)
+            server.send_message(msg)
+        print('Account request email sent!')
+        return jsonify({"status": True, "message": "Account request email sent!"})
+    except Exception as e:
+        print(f'Email error: {e}')
+        return jsonify({"status": False, "error": str(e)}), 500
+
 
 if __name__ == '__main__':
     app.run(debug=True, port=os.getenv('PORT', 5000))
