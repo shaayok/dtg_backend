@@ -1019,7 +1019,7 @@ def update_member_drop():
 
     try:
         member_id = data.get("id")
-        amazon_site = data.get("amazonSite")
+        amazon_site = data.get("site")
         payload = {
             "customFields": {
                 "amazon-site": amazon_site
