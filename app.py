@@ -965,34 +965,29 @@ def update_member():
         last_name = data.get("lastName")
         job_title = data.get("jobTitle")
         amazon_site = data.get("amazonSite")
-        managed_accounts = data.get("managedAccounts")
+        managed_accounts = data.get("managedAccounts",[])
+        type_req = data.get("type")
+        acc_all = None
+        if type_req == "setup":
+            acc_all = [amazon_site] + managed_accounts
 
-        
-        print(managed_accounts)
         # Step 1: lookup member ID
         member_id = get_member_id_by_email(email)
         if not member_id:
             return jsonify({"error": "Member not found"}), 404
 
         # Step 2: update member fields
-        if managed_accounts:
-            m_a_str = ", ".join(managed_accounts)
-            payload = {
-                "customFields": {
-                    "first-name": first_name,
-                    "last-name": last_name,
-                    "job-title": job_title,
-                    "amazon-site": amazon_site,
-                    "managed-accounts": m_a_str
-                }
-            }
+        if acc_all:
+            m_a_str = ", ".join(acc_all)
         else:
-            payload = {
+            m_a_str = amazon_site
+        payload = {
             "customFields": {
                 "first-name": first_name,
                 "last-name": last_name,
                 "job-title": job_title,
-                "amazon-site": amazon_site
+                "amazon-site": amazon_site if type_req == "setup" else amazon_site.split(',')[0],
+                "managed-accounts": m_a_str
             }
         }
         print("Payload:", payload)
