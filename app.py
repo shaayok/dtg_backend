@@ -13,6 +13,7 @@ import re
 import os
 from dotenv import load_dotenv
 from pdf_creator_1 import send_test_email_with_pdf
+from helpers import contact_create_update
 load_dotenv()   
 
 
@@ -181,9 +182,17 @@ def quote():
             print(f"✅ Created line for {product_id} (Qty: {qty})")
         else:
             print(f"❌ Failed to create line for {product_id}: {r.text}")
+
+    def query_soql(soql):
+        url = f"{instance_url}/services/data/v61.0/query"
+        resp = requests.get(url, headers=headers, params={"q": soql})
+        resp.raise_for_status()
+        return resp.json()
     
     def create_sales_quote(account_id):
         email = user.get('auth', {}).get('email', '')
+        cts = query_soql(f"SELECT Id, AccountId FROM Contact WHERE Email = '{email}'")
+        contact_id = cts["records"][0]["Id"]
         now = datetime.now()
         unique_key = f"{email}_{now.strftime('%Y%m%d%H%M%S%f')}"
         url = f"{instance_url}/services/data/v60.0/sobjects/gii__SalesQuote__c/"
@@ -193,7 +202,8 @@ def quote():
             "gii__Status__c": "Open",
             "gii__SalesRepresentative__c": "0031I000009dExWQAU",
             "OwnerId": "0051I000001qk6a",
-            "Portal_Request__c": unique_key
+            "Portal_Request__c": unique_key,
+            "Requisitioner__c": contact_id
         }
         r = requests.post(url, headers=headers, json=payload)
         if r.status_code == 201:
@@ -892,7 +902,7 @@ def dashboard():
 def update_address():
     data = request.get_json()
     # Get the account name from the request
-    account_name = data.get('account_name') or data.get('site_code')  # Accept 'account_name' or 'site_code'
+    account_name = data.get('account_name')  # Accept 'account_name' or 'site_code'
     if not account_name:
         return jsonify({'error': 'account_name or site_code is required'}), 400
 
@@ -960,13 +970,14 @@ def update_member():
         return data.get("id") or (data.get("data") or {}).get("id")
 
     try:
+        contact_create_update(data)
         email = data["email"]
         first_name = data.get("firstName")
         last_name = data.get("lastName")
         job_title = data.get("jobTitle")
         amazon_site = data.get("amazonSite")
         managed_accounts = data.get("managedAccounts",[])
-        type_req = data.get("type")
+        type_req = data.get("type","setup")
         acc_all = None
         if type_req == "setup":
             acc_all = [amazon_site] + managed_accounts
@@ -1868,141 +1879,6 @@ def get_sites():
     q = request.args.get("q", "").lower()
     results = [s for s in ALL_SITES if q in s.lower()] if q else ALL_SITES
     return jsonify(results[:50])
-
-@app.route('/api/contact_crud')
-def contact_create_update():
-
-
-    # ---- Helpers ----
-    def query_soql(soql):
-        url = f"{instance_url}/services/data/v61.0/query"
-        resp = requests.get(url, headers=headers, params={"q": soql})
-        resp.raise_for_status()
-        return resp.json()
-
-    def create_record(object_name, data):
-        url = f"{instance_url}/services/data/v61.0/sobjects/{object_name}/"
-        resp = requests.post(url, headers=headers, json=data)
-        if not resp.ok:
-            print("Salesforce Error:", resp.text)  # <--- debug payload
-            resp.raise_for_status()
-        return resp.json()["id"]
-
-
-    # ---- Input ----
-    access_token, instance_url = get_salesforce_access_token(
-        client_id=os.getenv('SALESFORCE_CLIENT_ID'),
-        client_secret=os.getenv('SALESFORCE_CLIENT_SECRET'),
-        username=os.getenv('SALESFORCE_USERNAME'),
-        password=os.getenv('SALESFORCE_PASSWORD'),
-        security_token=os.getenv('SALESFORCE_SECURITY_TOKEN')
-    )
-    headers = {
-        "Authorization": f"Bearer {access_token}",
-        "Content-Type": "application/json"
-    }
-    
-    data = request.json
-    primary_account_name = data.get("amazonSite")
-    managed_accounts = data.get("managedAccounts", [])
-    email = data.get("email")
-    first_name = data.get("firstName")
-    last_name = data.get("lastName")
-
-    # ---- Step 1: Get or Create Primary Account ----
-    accs = query_soql(f"SELECT Id FROM Account WHERE Name = '{primary_account_name}'")
-    if accs["totalSize"] == 0:
-        account_id = create_record("Account", {"Name": primary_account_name})
-    else:
-        account_id = accs["records"][0]["Id"]
-
-    # ---- Step 2: Get or Create Contact ----
-    cts = query_soql(f"SELECT Id FROM Contact WHERE Email = '{email}'")
-    if cts["totalSize"] == 0:
-        contact_data = {
-            "FirstName": first_name,
-            "LastName": last_name,
-            "Email": email,
-            "AccountId": account_id,
-            "Department__c": "Sales",
-            "Status__c": "Prospect",
-            "Contact_Type__c": "End User",
-            "LeadSource": "Website",
-            "OwnerId": "0051I000001qk6a"
-        }
-        contact_id = create_record("Contact", contact_data)
-    else:
-        contact_id = cts["records"][0]["Id"]
-
-    # ---- Step 3: Create AccountContactRelation for Managed Accounts ----
-    for acc_name in managed_accounts:
-        sec = query_soql(f"SELECT Id FROM Account WHERE Name = '{acc_name}'")
-        if sec["totalSize"] > 0:
-            sec_id = sec["records"][0]["Id"]
-            try:
-                create_record("AccountContactRelation", {
-                    "AccountId": sec_id,
-                    "ContactId": contact_id
-                })
-            except Exception as e:
-                print(f"Failed linking {email} to {acc_name}: {e}")
-
-    print(f"Contact {first_name} {last_name} ({email}) linked to {primary_account_name} + managed accounts.")
-
-@app.route('/api/send-account-request-email', methods=['POST'])
-def send_account_request_email():
-    data = request.json
-    if not data:
-        return jsonify({"status": False, "error": "Missing or invalid JSON body"}), 400
-
-    # Email config
-    gmail_user = os.getenv('GMAIL_USER')
-    gmail_app_password = os.getenv('GMAIL_APP_PASSWORD')
-    
-    # Recipients
-    email_to_1 = os.getenv('EMAIL_TO')
-    email_to_2 = 'ngardner@dtgpower.com'
-    email_to_3 = 'amazon-portal-activit-aaaaq74u3hzgbxwefmrhystcaa@the-dtg.slack.com'
-
-    recipients = [email for email in [email_to_1, email_to_2, email_to_3] if email and email.strip()]
-    to_email = ', '.join(recipients)
-
-    # Email subject
-    subject = f"New Account Request from {data.get('email', 'Unknown User')}"
-
-    # Pretty HTML body
-    html = f"""
-    <html>
-    <body>
-        <h2>New Account Request Submitted</h2>
-        <p><b>Requested by:</b> {data.get('email','')}</p>
-        <p><b>Accounts Requested:</b></p>
-        <ul>
-            {''.join([f"<li>{acc}</li>" for acc in data.get('managedAccounts', [])])}
-        </ul>
-        <br>
-        <p style="color:#888;">This is an automated notification.</p>
-    </body>
-    </html>
-    """
-
-    # Build email
-    msg = MIMEMultipart("alternative")
-    msg['Subject'] = subject
-    msg['From'] = gmail_user
-    msg['To'] = to_email
-    msg.attach(MIMEText(html, 'html'))
-
-    try:
-        with smtplib.SMTP('smtp.gmail.com', 587) as server:
-            server.starttls()
-            server.login(gmail_user, gmail_app_password)
-            server.send_message(msg)
-        print('Account request email sent!')
-        return jsonify({"status": True, "message": "Account request email sent!"})
-    except Exception as e:
-        print(f'Email error: {e}')
-        return jsonify({"status": False, "error": str(e)}), 500
 
 
 if __name__ == '__main__':
