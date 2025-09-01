@@ -68,7 +68,7 @@ def contact_create_update(request_body):
     for name in incoming_account_names:
         if not name:
             continue
-        accs = query_soql(f"SELECT Id FROM Account WHERE Name = '{name}'")
+        accs = query_soql(f"SELECT Id FROM Account WHERE Name = '{name.strip()}'")
         if accs["totalSize"] == 0:
             raise ValueError(f"Account not found: {name}")
         account_name_to_id[name] = accs["records"][0]["Id"]
