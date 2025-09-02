@@ -12,8 +12,10 @@ from email.mime.multipart import MIMEMultipart
 import re
 import os
 from dotenv import load_dotenv
-from pdf_creator_1 import send_test_email_with_pdf
+from pdf_creator_1 import send_test_email_with_pdf, build_quote_pdf_bytes
 from helpers import contact_create_update
+from flask import send_file
+import io
 load_dotenv()   
 
 
@@ -1880,6 +1882,140 @@ def get_sites():
     results = [s for s in ALL_SITES if q in s.lower()] if q else ALL_SITES
     return jsonify(results[:50])
 
+
+
+@app.route('/api/get-quote-pdf')
+def get_quote_pdf():
+    def get_sales_quote_lines(quote_id):
+        query = f"SELECT Id, gii__Product__c, gii__OrderQuantity__c FROM gii__SalesQuoteLine__c WHERE gii__SalesQuote__c = '{quote_id}'"
+        url = f"{instance_url}/services/data/v60.0/query?q={urllib.parse.quote(query)}"
+        r = requests.get(url, headers=headers)
+        return r.json().get("records", [])
+    
+    def get_product_details(product_id):
+        query = f"SELECT Name, Amazon_Price__c, gii__Description__c FROM gii__Product2Add__c WHERE Id = '{product_id}' LIMIT 1"
+        url = f"{instance_url}/services/data/v60.0/query?q={urllib.parse.quote(query)}"
+        r = requests.get(url, headers=headers)
+        records = r.json().get("records", [])
+        if records:
+            return records[0]["Name"], records[0].get("Amazon_Price__c", "N/A"), records[0].get("gii__Description__c", "N/A")
+        return "Unknown", "N/A", "N/A"
+    
+    def get_quote_details(quote_id: str) -> dict:
+        query = """
+        SELECT Id, Name, gii__Status__c, gii__QuoteDate__c, gii__Account__r.Name, gii__Account__r.ShippingStreet, gii__Account__r.ShippingCity, gii__Account__r.ShippingState, gii__Account__r.ShippingPostalCode, gii__Account__r.ShippingCountry  FROM gii__SalesQuote__c WHERE Id = '{qid}'
+        """.format(qid=quote_id)
+
+        url = f"{instance_url}/services/data/v60.0/query?q={urllib.parse.quote(query)}"
+        r = requests.get(url, headers=headers)
+
+        if r.status_code != 200:
+            print("Salesforce query failed:", r.text)
+            return {}
+
+        records = r.json().get("records", [])
+        if not records:
+            return {}
+
+        rec = records[0]
+        print(rec)
+        return {
+            "Id": rec.get("Id"),
+            "Name": rec.get("Name"),
+            "Status": rec.get("gii__Status__c"),
+            "QuoteDate": rec.get("gii__QuoteDate__c"),
+            "AccountName": rec.get("gii__Account__r", {}).get("Name", ""),
+            "street": rec.get("gii__Account__r", {}).get("ShippingStreet", ""),
+            "city": rec.get("gii__Account__r", {}).get("ShippingCity", ""),
+            "state": rec.get("gii__Account__r", {}).get("ShippingState", ""),
+            "postal_code": rec.get("gii__Account__r", {}).get("ShippingPostalCode", ""),
+            "country": rec.get("gii__Account__r", {}).get("ShippingCountry", ""),
+        }
+    
+    def get_sales_quotes_name(quote_id):
+        query = f"""
+        SELECT Id, Name, gii__Status__c, gii__QuoteDate__c 
+        FROM gii__SalesQuote__c 
+        WHERE Id = '{quote_id}'
+        """     
+        url = f"{instance_url}/services/data/v60.0/query?q={urllib.parse.quote(query)}"
+        r = requests.get(url, headers=headers)
+        return r.json().get("records", [])
+    def format_shipping_address(addr: dict) -> str:
+        """Safely combine address parts into a single string with newlines."""
+        parts = [
+            addr.get("street", ""),
+            " ".join([addr.get("city",""), addr.get("state",""), addr.get("postal_code","")]).strip(),
+            addr.get("country", "")
+        ]
+        return "\n".join([p for p in parts if p])   # remove empty parts
+
+    def get_quote_id(quote_name: str) -> str:
+        query = f"SELECT Id FROM gii__SalesQuote__c WHERE Name = '{quote_name}' LIMIT 1"
+        url = f"{instance_url}/services/data/v60.0/query?q={urllib.parse.quote(query)}"
+        r = requests.get(url, headers=headers)
+
+        if r.status_code != 200:
+            print("Salesforce query failed:", r.text)
+            return None
+
+        records = r.json().get("records", [])
+        if not records:
+            return None
+
+        return records[0]["Id"]
+
+    
+    access_token, instance_url = get_salesforce_access_token(
+        client_id=os.getenv('SALESFORCE_CLIENT_ID'),
+        client_secret=os.getenv('SALESFORCE_CLIENT_SECRET'),
+        username=os.getenv('SALESFORCE_USERNAME'),
+        password=os.getenv('SALESFORCE_PASSWORD'),
+        security_token=os.getenv('SALESFORCE_SECURITY_TOKEN')
+    )
+    #print('Generated Access Token and Instance URL')
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json"
+    }
+    quote_name = request.args.get("quote_name")
+    if not quote_name:
+        return {"error": "quote_name is required"}, 400
+    quote_id = get_quote_id(quote_name)
+    quote_info = get_quote_details(quote_id)
+    print("Fetched quote details:", quote_info)
+    quote_data = {
+                    "name": quote_info['Name'],
+                    "status": quote_info['Status'],
+                    "shipping_address":format_shipping_address(quote_info),
+                    "account_name": quote_info.get("AccountName", ""),
+                    "quote_date": quote_info['QuoteDate'],
+                    "lines": []
+                }
+    quote_lines = get_sales_quote_lines(quote_id)
+    for ql in quote_lines:
+        pname, pprice, pdescription = get_product_details(ql["gii__Product__c"])
+        # Convert price to float, handle "N/A" case
+        try:
+            price_float = float(pprice) if pprice != "N/A" else 0.0
+        except (ValueError, TypeError):
+            price_float = 0.0
+            
+        line_data = {
+            "name": pname,
+            "qty": ql['gii__OrderQuantity__c'],
+            "price": price_float,
+            "description": pdescription
+        }
+        quote_data["lines"].append(line_data)
+    print("Quote data prepared for PDF:", quote_data)
+    pdf = build_quote_pdf_bytes(quote_data)
+    return send_file(
+        io.BytesIO(pdf),
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=f"{quote_data['name']}.pdf"
+    )
 
 if __name__ == '__main__':
     app.run(debug=True, port=os.getenv('PORT', 5000))
