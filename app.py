@@ -615,7 +615,7 @@ def get_account_data():
         for all shipments related to a sales order.
         """
         query = (
-            "SELECT Id, gii__TrackingLink__c, gii__ShipmentStatus__c "
+            "SELECT Id, Tracking_Link_Custom__c, gii__ShipmentStatus__c "
             f"FROM gii__Shipment__c WHERE gii__SalesOrder__c = '{sales_order_id}'"
         )
         url = f"{instance_url}/services/data/v60.0/query?q={urllib.parse.quote(query)}"
@@ -625,7 +625,7 @@ def get_account_data():
         records = r.json().get("records", [])
         shipments = [
             {
-                "tracking_link": rec.get("gii__TrackingLink__c"),
+                "tracking_link": rec.get("Tracking_Link_Custom__c"),
                 "shipment_status": rec.get("gii__ShipmentStatus__c"),
             }
             for rec in records
