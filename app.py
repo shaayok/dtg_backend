@@ -1876,12 +1876,41 @@ ALL_SITES =  ["Amazon ABE2",
  "Amazon YYZ7",
  "Amazon YYZ9",
 ]
-@app.route("/sites")
-def get_sites():
+@app.route("/sites_fixed")
+def get_sites_fixed():
     q = request.args.get("q", "").lower()
     results = [s for s in ALL_SITES if q in s.lower()] if q else ALL_SITES
     return jsonify(results[:50])
 
+@app.route("/sites")
+def get_sites():
+    access_token, instance_url = get_salesforce_access_token(
+        client_id=os.getenv('SALESFORCE_CLIENT_ID'),
+        client_secret=os.getenv('SALESFORCE_CLIENT_SECRET'),
+        username=os.getenv('SALESFORCE_USERNAME'),
+        password=os.getenv('SALESFORCE_PASSWORD'),
+        security_token=os.getenv('SALESFORCE_SECURITY_TOKEN')
+    )
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json"
+    }
+    q = request.args.get("q", "").strip()
+    if not q:
+        return jsonify([])   # don’t return all Accounts blindly
+
+    # Prefix match: site names that start with "Amazon{q}"
+    soql = f"SELECT Name FROM Account WHERE Name LIKE 'Amazon {q}%' LIMIT 50"
+    url = f"{instance_url}/services/data/v60.0/query?q={urllib.parse.quote(soql)}"
+    r = requests.get(url, headers=headers)
+
+    if r.status_code != 200:
+        return jsonify({"error": "Salesforce query failed", "details": r.text}), 500
+
+    records = r.json().get("records", [])
+    sites = [rec["Name"] for rec in records]
+
+    return jsonify(sites)
 
 
 @app.route('/api/get-quote-pdf')
@@ -2017,5 +2046,15 @@ def get_quote_pdf():
         download_name=f"{quote_data['name']}.pdf"
     )
 
+@app.route('/api/notify', methods=['POST'])
+def notify():
+    data = request.json
+    print("Received notification:", data)
+    return {"status": "success"}, 200
+
 if __name__ == '__main__':
-    app.run(debug=True, port=os.getenv('PORT', 5000))
+    app.run(debug=True, port=os.getenv('PORT', 8000))
+
+
+
+# TODO: 1) Do not remove Account Contact Relation ship; 2) ShipAddress line 2 should not be compulsory
