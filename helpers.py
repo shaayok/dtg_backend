@@ -117,7 +117,7 @@ def contact_create_update(request_body):
     existing_ids = set(existing_acrs.keys())
 
     to_add = incoming_ids - existing_ids
-    to_remove = existing_ids - incoming_ids
+    #to_remove = existing_ids - incoming_ids
 
     # ---- Step 5: Add new ACRs ----
     for acc_id in to_add:
@@ -131,11 +131,11 @@ def contact_create_update(request_body):
             print(f"Failed linking {email} to {acc_id}: {e}")
 
     # ---- Step 6: Remove missing ACRs (skip primary AccountId) ----
-    for acc_id in to_remove:
-        acr_id = existing_acrs[acc_id]
-        if acr_id:  # skip primary (AccountId)
-            delete_record("AccountContactRelation", acr_id)
-            print(f"Removed link between {email} and Account {acc_id}")
+    # for acc_id in to_remove:
+    #     acr_id = existing_acrs[acc_id]
+    #     if acr_id:  # skip primary (AccountId)
+    #         delete_record("AccountContactRelation", acr_id)
+    #         print(f"Removed link between {email} and Account {acc_id}")
 
     print(
     f"Contact {first_name} {last_name} ({email}) synced with accounts: {incoming_account_names}. "
