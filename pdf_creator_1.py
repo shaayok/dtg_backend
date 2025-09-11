@@ -181,8 +181,7 @@ def send_test_email_with_pdf(sample):
     email_to_1 = os.getenv('EMAIL_TO')
     email_to_2 = 'sayaksamaddar@virtualemployee.com'  # Second email recipient
     email_to_3 = 'amazon-portal-activit-aaaaq74u3hzgbxwefmrhystcaa@the-dtg.slack.com'
-    email_to_4 = sample.get('creator', '')  # Creator's email from sample data
-    recipients = [email for email in [email_to_1, email_to_2, email_to_3, email_to_4] if email.strip()]
+    recipients = [email for email in [email_to_1, email_to_2, email_to_3] if email.strip()]
     to_email = ', '.join(recipients)
     if not all([gmail_user, gmail_app_password, to_email]):
         raise RuntimeError("Set GMAIL_USER, GMAIL_APP_PASSWORD, EMAIL_TO env vars.")
@@ -236,8 +235,7 @@ def send_contact_created_email(data):
     email_to_1 = os.getenv('EMAIL_TO')
     email_to_2 = 'sayaksamaddar@virtualemployee.com'  # Second email recipient
     email_to_3 = 'amazon-portal-activit-aaaaq74u3hzgbxwefmrhystcaa@the-dtg.slack.com'
-    email_to_4 = sample.get('creator', '')  # Creator's email from sample data
-    recipients = [email for email in [email_to_1, email_to_2, email_to_3, email_to_4] if email.strip()]
+    recipients = [email for email in [email_to_1, email_to_2, email_to_3] if email.strip()]
     to_email = ', '.join(recipients)
 
     subject = f"New Salesforce Contact: {data.get('firstName','')} {data.get('lastName','')}"
@@ -278,8 +276,7 @@ def send_account_address_changed_email(data):
     email_to_1 = os.getenv('EMAIL_TO')
     email_to_2 = 'sayaksamaddar@virtualemployee.com'  # Second email recipient
     email_to_3 = 'amazon-portal-activit-aaaaq74u3hzgbxwefmrhystcaa@the-dtg.slack.com'
-    email_to_4 = sample.get('creator', '')  # Creator's email from sample data
-    recipients = [email for email in [email_to_1, email_to_2, email_to_3, email_to_4] if email.strip()]
+    recipients = [email for email in [email_to_1, email_to_2, email_to_3] if email.strip()]
     to_email = ', '.join(recipients)
 
     subject = f"Salesforce Account Address Changed: {data.get('accountName','Unknown Account')}"
@@ -324,8 +321,7 @@ def send_account_request_email(data):
     email_to_1 = os.getenv('EMAIL_TO')
     email_to_2 = 'sayaksamaddar@virtualemployee.com'  # Second email recipient
     email_to_3 = 'amazon-portal-activit-aaaaq74u3hzgbxwefmrhystcaa@the-dtg.slack.com'
-    email_to_4 = sample.get('creator', '')  # Creator's email from sample data
-    recipients = [email for email in [email_to_1, email_to_2, email_to_3, email_to_4] if email.strip()]
+    recipients = [email for email in [email_to_1, email_to_2, email_to_3] if email.strip()]
     to_email = ', '.join(recipients)
 
     subject = f"Account addition request by {data.get('email','Unknown user')}"
