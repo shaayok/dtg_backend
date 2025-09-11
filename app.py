@@ -728,7 +728,7 @@ def get_account_data():
                 }
                 order_data["shipments"] = shipments
                 print(order_data)
-                if shipments and shipments[0].get("tracking_link"):
+                if shipments and shipments[0].get("tracking_link") and order_data['status'].lower() == "open":
                     order_data['status'] = "Shipped"
                 
                 lines = get_sales_order_lines(order["Id"])
