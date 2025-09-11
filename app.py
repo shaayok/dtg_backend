@@ -2064,6 +2064,73 @@ def get_quote_pdf():
         download_name=f"{quote_data['name']}.pdf"
     )
 
+@app.route('/api/delete-quote', methods=['POST'])
+def delete_quote():
+    data = request.get_json()
+    quote_name = data.get("quoteName")
+    email = data.get("userEmail", "")
+    if not quote_name:
+        return {"error": "Quote Name is required"}, 400
+
+    access_token, instance_url = get_salesforce_access_token(
+        client_id=os.getenv('SALESFORCE_CLIENT_ID'),
+        client_secret=os.getenv('SALESFORCE_CLIENT_SECRET'),
+        username=os.getenv('SALESFORCE_USERNAME'),
+        password=os.getenv('SALESFORCE_PASSWORD'),
+        security_token=os.getenv('SALESFORCE_SECURITY_TOKEN')
+    )
+
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json"
+    }
+
+    # 1. Get the SalesQuote Id by Name
+    soql_quote = f"SELECT Id FROM gii__SalesQuote__c WHERE Name = '{quote_name}'"
+    quote_url = f"{instance_url}/services/data/v60.0/query?q={soql_quote}"
+
+    quote_resp = requests.get(quote_url, headers=headers)
+    quote_resp.raise_for_status()
+    quote_records = quote_resp.json().get("records", [])
+
+    if not quote_records:
+        raise ValueError(f"No SalesQuote found with Name={quote_name}")
+
+    quote_id = quote_records[0]["Id"]
+    print("Found SalesQuote Id:", quote_id)
+
+    # 2. Get all SalesQuoteLine Ids for that SalesQuote
+    soql_lines = f"SELECT Id FROM gii__SalesQuoteLine__c WHERE gii__SalesQuote__c = '{quote_id}'"
+    line_url = f"{instance_url}/services/data/v60.0/query?q={soql_lines}"
+
+    line_resp = requests.get(line_url, headers=headers)
+    line_resp.raise_for_status()
+    line_records = line_resp.json().get("records", [])
+
+    # 3. Delete each SalesQuoteLine record
+    for rec in line_records:
+        rec_id = rec["Id"]
+        del_url = f"{instance_url}/services/data/v60.0/sobjects/gii__SalesQuoteLine__c/{rec_id}"
+        del_resp = requests.delete(del_url, headers=headers)
+        if del_resp.status_code == 204:
+            print(f"Deleted line {rec_id}")
+        else:
+            print(f"Failed to delete line {rec_id}: {del_resp.text}")
+
+
+    del_quote_url = f"{instance_url}/services/data/v60.0/sobjects/gii__SalesQuote__c/{quote_id}"
+    del_quote_resp = requests.delete(del_quote_url, headers=headers)
+
+    if del_quote_resp.status_code == 204:
+        print(f"Deleted SalesQuote {quote_id}")
+    else:
+        print(f"Failed to delete SalesQuote {quote_id}: {del_quote_resp.text}")
+
+
+    return {"status": "success"}, 200
+
+
+
 @app.route('/api/notify', methods=['POST'])
 def notify_asynch():
     data = request.json or {}
