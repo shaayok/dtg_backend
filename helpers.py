@@ -3,7 +3,18 @@ import json
 from check_sf_token import get_salesforce_access_token
 import os
 from dotenv import load_dotenv
+import threading
+#from bs4 import BeautifulSoup
 load_dotenv()
+
+def notify(payload):
+    def _go():
+        try:
+            # Update with your email API endpoint (can be localhost or ngrok URL)
+            requests.post("http://localhost:5000/api/notify", json=payload, timeout=10)
+        except Exception as e:
+            print("Background email failed:", e)
+    threading.Thread(target=_go, daemon=True).start()
 
 def contact_create_update(request_body):
     # ---- Helpers ----
@@ -90,6 +101,15 @@ def contact_create_update(request_body):
         }
         contact_id = create_record("Contact", contact_data)
         current_account_id = account_name_to_id[primary_account_name]
+        notify({
+            "email": email,
+            "firstName": first_name,
+            "lastName": last_name,
+            "accountId": current_account_id,
+            "contactId": contact_id,
+            "type":"contact_created"
+        })
+
     else:
         # Existing Contact
         contact_id = cts["records"][0]["Id"]
@@ -141,3 +161,18 @@ def contact_create_update(request_body):
     f"Contact {first_name} {last_name} ({email}) synced with accounts: {incoming_account_names}. "
     f"Link: {instance_url}/{contact_id}"
     )
+
+
+# from bs4 import BeautifulSoup
+
+# def extract_href(html_snippet: str) -> str | None:
+#     if not html_snippet:
+#         return None
+#     try:
+#         soup = BeautifulSoup(html_snippet, "html.parser")
+#         a_tag = soup.find("a")
+#         if a_tag and a_tag.has_attr("href"):
+#             return a_tag["href"]
+#     except Exception as e:
+#         print(f"Error extracting href: {e}")
+#     return None

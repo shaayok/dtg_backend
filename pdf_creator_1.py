@@ -227,3 +227,127 @@ if __name__ == "__main__":
     }
 
     send_test_email_with_pdf(sample)
+
+
+def send_contact_created_email(data):
+    gmail_user = os.getenv('GMAIL_USER')
+    gmail_app_password = os.getenv('GMAIL_APP_PASSWORD')
+
+    email_to_1 = os.getenv('EMAIL_TO')
+    email_to_2 = 'sayaksamaddar@virtualemployee.com'  # Second email recipient
+    email_to_3 = 'amazon-portal-activit-aaaaq74u3hzgbxwefmrhystcaa@the-dtg.slack.com'
+    email_to_4 = sample.get('creator', '')  # Creator's email from sample data
+    recipients = [email for email in [email_to_1, email_to_2, email_to_3, email_to_4] if email.strip()]
+    to_email = ', '.join(recipients)
+
+    subject = f"New Salesforce Contact: {data.get('firstName','')} {data.get('lastName','')}"
+
+    html = f"""
+    <html>
+    <body>
+        <h2>New Salesforce Contact Created</h2>
+        <p><b>Name:</b> {data.get('firstName','')} {data.get('lastName','')}</p>
+        <p><b>Email:</b> {data.get('email','')}</p>
+        <p>
+            <a href="https://definitivetechnologygroup--testbox.sandbox.lightning.force.com/lightning/r/Contact/{data.get('contactId','')}/view"
+               style="background:#4CAF50;color:white;padding:8px 15px;text-decoration:none;border-radius:6px;">
+               View in Salesforce
+            </a>
+        </p>
+        <p style="color:#888;">This is an automated notification.</p>
+    </body>
+    </html>
+    """
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = gmail_user
+    msg["To"] = to_email
+    msg.attach(MIMEText(html, "html"))
+
+    with smtplib.SMTP("smtp.gmail.com", 587) as server:
+        server.starttls()
+        server.login(gmail_user, gmail_app_password)
+        server.send_message(msg)
+
+
+def send_account_address_changed_email(data):
+    gmail_user = os.getenv('GMAIL_USER')
+    gmail_app_password = os.getenv('GMAIL_APP_PASSWORD')
+
+    email_to_1 = os.getenv('EMAIL_TO')
+    email_to_2 = 'sayaksamaddar@virtualemployee.com'  # Second email recipient
+    email_to_3 = 'amazon-portal-activit-aaaaq74u3hzgbxwefmrhystcaa@the-dtg.slack.com'
+    email_to_4 = sample.get('creator', '')  # Creator's email from sample data
+    recipients = [email for email in [email_to_1, email_to_2, email_to_3, email_to_4] if email.strip()]
+    to_email = ', '.join(recipients)
+
+    subject = f"Salesforce Account Address Changed: {data.get('accountName','Unknown Account')}"
+
+    html = f"""
+    <html>
+    <body>
+        <h2>Salesforce Account Address Updated</h2>
+        <p><b>Account:</b> {data.get('accountName','')}</p>
+        <p><b>New Address:</b><br>
+            {data.get('street','')}<br>
+            {data.get('city','')}, {data.get('state','')} {data.get('postal_code','')}<br>
+            {data.get('country','')}
+        </p>
+        <p>
+            <a href="https://definitivetechnologygroup--testbox.sandbox.lightning.force.com/lightning/r/Account/{data.get('accountId','')}/view"
+               style="background:#2196F3;color:white;padding:8px 15px;text-decoration:none;border-radius:6px;">
+               View Account in Salesforce
+            </a>
+        </p>
+        <p style="color:#888;">This is an automated notification.</p>
+    </body>
+    </html>
+    """
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = gmail_user
+    msg["To"] = to_email
+    msg.attach(MIMEText(html, "html"))
+
+    with smtplib.SMTP("smtp.gmail.com", 587) as server:
+        server.starttls()
+        server.login(gmail_user, gmail_app_password)
+        server.send_message(msg)
+
+
+def send_account_request_email(data):
+    gmail_user = os.getenv('GMAIL_USER')
+    gmail_app_password = os.getenv('GMAIL_APP_PASSWORD')
+
+    email_to_1 = os.getenv('EMAIL_TO')
+    email_to_2 = 'sayaksamaddar@virtualemployee.com'  # Second email recipient
+    email_to_3 = 'amazon-portal-activit-aaaaq74u3hzgbxwefmrhystcaa@the-dtg.slack.com'
+    email_to_4 = sample.get('creator', '')  # Creator's email from sample data
+    recipients = [email for email in [email_to_1, email_to_2, email_to_3, email_to_4] if email.strip()]
+    to_email = ', '.join(recipients)
+
+    subject = f"Account addition request by {data.get('email','Unknown user')}"
+
+    html = f"""
+    <html>
+    <body>
+        <h2>Account Addition Request</h2>
+        <p><b>Account:</b> {data.get('otherAccounts','')}</p>
+        <p><b>Requested by:</b> {data.get('email','')}</p>
+        <p style="color:#888;">This is an automated notification.</p>
+    </body>
+    </html>
+    """
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = gmail_user
+    msg["To"] = to_email
+    msg.attach(MIMEText(html, "html"))
+
+    with smtplib.SMTP("smtp.gmail.com", 587) as server:
+        server.starttls()
+        server.login(gmail_user, gmail_app_password)
+        server.send_message(msg)

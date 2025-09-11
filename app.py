@@ -12,8 +12,12 @@ from email.mime.multipart import MIMEMultipart
 import re
 import os
 from dotenv import load_dotenv
-from pdf_creator_1 import send_test_email_with_pdf, build_quote_pdf_bytes
-from helpers import contact_create_update
+from pdf_creator_1 import (send_test_email_with_pdf, 
+                           build_quote_pdf_bytes, 
+                           send_contact_created_email,
+                           send_account_address_changed_email,
+                           send_account_request_email)
+from helpers import contact_create_update, notify
 from flask import send_file
 import io
 load_dotenv()   
@@ -249,6 +253,7 @@ def quote():
             print("✅ Shipping address entered is valid")
             if address_differs(account, shipping_address):
                 updated = update_account_address(account_id, shipping_address)
+                notify({"accountId":account_id,"accountName": account_name, **shipping_address,"country":"US", "type":"address_changed"})
                 change = "Y" if updated else "N"
                 print("🔄 Address updated" if updated else "⚠️ Address update failed")
             else:
@@ -455,16 +460,12 @@ def fetch_address():
     address = records[0] if records else None
     if not address:
         return jsonify({"status": False, "error": "Address not found for the given account"}), 404
-    shipping_street = address.get('ShippingStreet', '')
-    if shipping_street:
-        address1, address2 = split_address_by_words(shipping_street)
-    else:
-        address1, address2 = "", ""    
+    address1 = address.get('ShippingStreet', '')
 
     address_resp = {
         "shipto": first_name + " " + last_name,
         "address1": address1,
-        "address2": address2,
+        "address2":" ",
         "city": address.get('ShippingCity'),
         "state": address.get('ShippingState'),
         "zip": address.get('ShippingPostalCode'),
@@ -582,7 +583,7 @@ def get_account_data():
         offset = (page - 1) * 5
         query = f"""
         SELECT Id, Name, gii__Status__c, gii__OrderType__c, gii__OrderStatus__c, 
-            gii__SalesQuote__c, gii__SalesQuote__r.Quote_Name__c, gii__OrderDate__c
+            gii__SalesQuote__c, gii__SalesQuote__r.Quote_Name__c, gii__OrderDate__c,gii__CustomerPONumber__c
         FROM gii__SalesOrder__c 
         WHERE gii__Account__c = '{account_id}'
         ORDER BY gii__OrderDate__c DESC
@@ -718,7 +719,7 @@ def get_account_data():
                 shipments = get_shipments_for_order(order["Id"])
                 
                 order_data = {
-                    "name": order['Name'],
+                    "name": order['gii__CustomerPONumber__c'],
                     "status": order['gii__Status__c'],
                     "quote_id": quote_id,
                     "quote_name": quote_name,
@@ -726,6 +727,9 @@ def get_account_data():
                     "lines": []
                 }
                 order_data["shipments"] = shipments
+                print(order_data)
+                if shipments and shipments[0].get("tracking_link"):
+                    order_data['status'] = "Shipped"
                 
                 lines = get_sales_order_lines(order["Id"])
                 for line in lines:
@@ -910,6 +914,7 @@ def update_address():
 
     # Get the address fields
     shipping_data = {}
+    d_send = {}
     if data.get('address_line_1'):
         shipping_data["ShippingStreet"] = data.get('address_line_1')
     if data.get('city'):
@@ -924,6 +929,14 @@ def update_address():
     if data.get('address_line_2'):
         shipping_data["ShippingStreet"] += f"\n{data.get('address_line_2')}"
     
+    d_send['street'] = shipping_data.get("ShippingStreet","")
+    d_send['city'] = shipping_data.get("ShippingCity","")
+    d_send['state'] = shipping_data.get("ShippingState","")
+    d_send['postal_code'] = shipping_data.get("ShippingPostalCode","")
+    d_send['country'] = shipping_data.get("ShippingCountry","")
+    d_send['type'] = "address_changed"
+    d_send['accountName'] = account_name
+
     # Authenticate with Salesforce
     access_token, instance_url = get_salesforce_access_token(
         client_id=os.getenv('SALESFORCE_CLIENT_ID'),
@@ -948,11 +961,14 @@ def update_address():
     if not records:
         return jsonify({'error': f"Account '{account_name}' not found"}), 404
     account_id = records[0]['Id']
-
+    d_send['accountId'] = account_id
     # Update Shipping Address
     update_url = f"{instance_url}/services/data/v60.0/sobjects/Account/{account_id}"
     update_resp = requests.patch(update_url, json=shipping_data, headers=headers)
     if update_resp.status_code == 204:
+        print(type(d_send))
+        print(d_send)
+        notify({**d_send})
         return jsonify({'status': 'success', 'message': 'Shipping address updated'})
     else:
         return jsonify({'status': 'fail', 'error': update_resp.text}), update_resp.status_code
@@ -980,6 +996,7 @@ def update_member():
         amazon_site = data.get("amazonSite")
         managed_accounts = data.get("managedAccounts",[])
         type_req = data.get("type","setup")
+        other_accounts = data.get("otherAccounts","")
         acc_all = None
         if type_req == "setup":
             acc_all = [amazon_site] + managed_accounts
@@ -1003,7 +1020,6 @@ def update_member():
                 "managed-accounts": m_a_str
             }
         }
-        print("Payload:", payload)
         resp = requests.patch(
             f"{BASE_URL}/members/{member_id}",
             headers=HEADERS,
@@ -1011,6 +1027,8 @@ def update_member():
             timeout=10
         )
         resp.raise_for_status()
+        if other_accounts:
+            notify({"type": "account_request", "otherAccounts": other_accounts, "email": email})
 
         return jsonify({"status": "success", "memberId": member_id, "updated": resp.json()})
 
@@ -2047,14 +2065,14 @@ def get_quote_pdf():
     )
 
 @app.route('/api/notify', methods=['POST'])
-def notify():
-    data = request.json
-    print("Received notification:", data)
+def notify_asynch():
+    data = request.json or {}
+    if data.get("type") == "contact_created":
+        send_contact_created_email(data)
+    elif data.get("type") == "address_changed":
+        send_account_address_changed_email(data)
+    elif data.get("type") == "account_request":
+        send_account_request_email(data)
     return {"status": "success"}, 200
-
 if __name__ == '__main__':
-    app.run(debug=True, port=os.getenv('PORT', 8000))
-
-
-
-# TODO: 1) Do not remove Account Contact Relation ship; 2) ShipAddress line 2 should not be compulsory
+    app.run(debug=True, port=os.getenv('PORT', 5000))
