@@ -604,7 +604,8 @@ def get_account_data():
         query = f"""
         SELECT Id, Name, gii__Status__c, gii__QuoteDate__c 
         FROM gii__SalesQuote__c 
-        WHERE gii__Account__c = '{account_id}'
+        WHERE gii__Account__c = '{account_id}' and
+        gii__CloseReason__c	!= 'Portal Cancellation'
         ORDER BY gii__QuoteDate__c DESC
         LIMIT 5 OFFSET {offset}
         """
@@ -2064,8 +2065,8 @@ def get_quote_pdf():
         download_name=f"{quote_data['name']}.pdf"
     )
 
-@app.route('/api/delete-quote', methods=['POST'])
-def delete_quote():
+@app.route('/api/delete-quote-hard', methods=['POST'])
+def delete_quote_hard():
     data = request.get_json()
     quote_name = data.get("quoteName")
     email = data.get("userEmail", "")
@@ -2126,6 +2127,58 @@ def delete_quote():
     else:
         print(f"Failed to delete SalesQuote {quote_id}: {del_quote_resp.text}")
 
+
+    return {"status": "success"}, 200
+
+
+@app.route('/api/delete-quote', methods=['POST'])
+def delete_quote():
+    data = request.get_json()
+    quote_name = data.get("quoteName")
+    email = data.get("userEmail", "")
+    if not quote_name:
+        return {"error": "Quote Name is required"}, 400
+
+    access_token, instance_url = get_salesforce_access_token(
+        client_id=os.getenv('SALESFORCE_CLIENT_ID'),
+        client_secret=os.getenv('SALESFORCE_CLIENT_SECRET'),
+        username=os.getenv('SALESFORCE_USERNAME'),
+        password=os.getenv('SALESFORCE_PASSWORD'),
+        security_token=os.getenv('SALESFORCE_SECURITY_TOKEN')
+    )
+
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json"
+    }
+
+    # 1. Get the SalesQuote Id by Name
+    soql_quote = f"SELECT Id FROM gii__SalesQuote__c WHERE Name = '{quote_name}'"
+    quote_url = f"{instance_url}/services/data/v60.0/query?q={soql_quote}"
+
+    quote_resp = requests.get(quote_url, headers=headers)
+    quote_resp.raise_for_status()
+    quote_records = quote_resp.json().get("records", [])
+
+    if not quote_records:
+        raise ValueError(f"No SalesQuote found with Name={quote_name}")
+
+    quote_id = quote_records[0]["Id"]
+    print("Found SalesQuote Id:", quote_id)
+
+    # Now update the fields instead of deleting
+    update_url = f"{instance_url}/services/data/v60.0/sobjects/gii__SalesQuote__c/{quote_id}"
+    payload = {
+        "gii__Status__c": "Closed",
+        "gii__CloseReason__c": "Portal Cancellation"
+    }
+
+    update_resp = requests.patch(update_url, headers=headers, json=payload)
+
+    if update_resp.status_code == 204:
+        print(f"SalesQuote {quote_id} updated successfully")
+    else:
+        print(f"Failed to update SalesQuote: {update_resp.status_code}, {update_resp.text}")
 
     return {"status": "success"}, 200
 
