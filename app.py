@@ -605,7 +605,7 @@ def get_account_data():
         SELECT Id, Name, gii__Status__c, gii__QuoteDate__c 
         FROM gii__SalesQuote__c 
         WHERE gii__Account__c = '{account_id}' and
-        gii__CloseReason__c	!= 'Portal Cancellation'
+        gii__Status__c	= 'Open'
         ORDER BY gii__QuoteDate__c DESC
         LIMIT 5 OFFSET {offset}
         """
