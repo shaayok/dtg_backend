@@ -646,10 +646,10 @@ def get_account_data():
     def get_order_stats(account_id):
         """Returns total orders and open orders count for an account"""
         # Total orders
-        total_query = f"SELECT COUNT() FROM gii__SalesOrder__c WHERE gii__Account__c = '{account_id}'"
-        total_url = f"{instance_url}/services/data/v60.0/query?q={urllib.parse.quote(total_query)}"
-        total_response = requests.get(total_url, headers=headers)
-        total_orders = total_response.json().get("totalSize", 0)
+        # total_query = f"SELECT COUNT() FROM gii__SalesOrder__c WHERE gii__Account__c = '{account_id}'"
+        # total_url = f"{instance_url}/services/data/v60.0/query?q={urllib.parse.quote(total_query)}"
+        # total_response = requests.get(total_url, headers=headers)
+        # total_orders = total_response.json().get("totalSize", 0)
         
         # Open orders
         open_query = f"SELECT COUNT() FROM gii__SalesOrder__c WHERE gii__Account__c = '{account_id}' AND gii__Status__c = 'Open'"
@@ -657,15 +657,15 @@ def get_account_data():
         open_response = requests.get(open_url, headers=headers)
         open_orders = open_response.json().get("totalSize", 0)
         
-        return total_orders, open_orders
+        return open_orders, open_orders
     
     def get_quote_stats(account_id):
         """Returns total quotes and open quotes count for an account"""
         # Total quotes
-        total_query = f"SELECT COUNT() FROM gii__SalesQuote__c WHERE gii__Account__c = '{account_id}'"
-        total_url = f"{instance_url}/services/data/v60.0/query?q={urllib.parse.quote(total_query)}"
-        total_response = requests.get(total_url, headers=headers)
-        total_quotes = total_response.json().get("totalSize", 0)
+        # total_query = f"SELECT COUNT() FROM gii__SalesQuote__c WHERE gii__Account__c = '{account_id}'"
+        # total_url = f"{instance_url}/services/data/v60.0/query?q={urllib.parse.quote(total_query)}"
+        # total_response = requests.get(total_url, headers=headers)
+        # total_quotes = total_response.json().get("totalSize", 0)
         
         # Open quotes
         open_query = f"SELECT COUNT() FROM gii__SalesQuote__c WHERE gii__Account__c = '{account_id}' AND gii__Status__c = 'Open'"
@@ -673,7 +673,7 @@ def get_account_data():
         open_response = requests.get(open_url, headers=headers)
         open_quotes = open_response.json().get("totalSize", 0)
         
-        return total_quotes, open_quotes
+        return open_quotes, open_quotes
     
     # Get account name from query parameter
     account_name = request.args.get('account_name')
