@@ -162,6 +162,11 @@ def build_quote_pdf_bytes(data: dict) -> bytes:
 
     # --- Footer with page numbers ---
     def _footer(canvas, doc_):
+
+        # --- metadata (set once per file, not per page) ---
+        canvas.setAuthor("DTG")   # what you want to appear instead of anonymous
+        canvas.setTitle(data.get("name", "Quotation"))
+        canvas.setSubject("Customer Quotation")
         canvas.saveState()
         canvas.setFont("Helvetica", 9)
         canvas.drawRightString(doc_.pagesize[0] - right, 0.45*inch, f"Page {doc_.page}")

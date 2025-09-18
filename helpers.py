@@ -161,18 +161,3 @@ def contact_create_update(request_body):
     f"Contact {first_name} {last_name} ({email}) synced with accounts: {incoming_account_names}. "
     f"Link: {instance_url}/{contact_id}"
     )
-
-
-# from bs4 import BeautifulSoup
-
-# def extract_href(html_snippet: str) -> str | None:
-#     if not html_snippet:
-#         return None
-#     try:
-#         soup = BeautifulSoup(html_snippet, "html.parser")
-#         a_tag = soup.find("a")
-#         if a_tag and a_tag.has_attr("href"):
-#             return a_tag["href"]
-#     except Exception as e:
-#         print(f"Error extracting href: {e}")
-#     return None
